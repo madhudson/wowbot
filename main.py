@@ -23,7 +23,6 @@ class WoWBot(discord.Client):
       return r.json()
 
   def parse_recent_runs(self, data):
-    print('in here lolololol')
     runs = data.get('mythic_plus_recent_runs', None)
     if not runs or len(runs) == 0:
       return
@@ -35,7 +34,6 @@ class WoWBot(discord.Client):
   
   async def raiderio(self):
     while True:
-      time.sleep(3)
       if not self.channel_id:
         for chan in self.get_all_channels():
           if chan.name == 'general':
@@ -48,17 +46,23 @@ class WoWBot(discord.Client):
         except Exception as e:
           await chan.send(e)
           return
-        print('about to call sdlfksjdf')
         parsed = self.parse_recent_runs(data)
-        print('done in there lol')
         if parsed:
           await chan.send(parsed)
-        
+      time.sleep(10)
+
+  def parse_message(self, msg):
+    if msg.content.startswith('!'):
+      
+  
   async def on_ready(self):
     print(f'logged in as {self.user}')
 
   async def on_message(self, message):
     if message.author == self.user:
+      return
+    parsed = self.parse_message(message)
+    if not parsed: 
       return
     asyncio.ensure_future(self.raiderio())
     print('tis done')
