@@ -19,10 +19,11 @@ class WoWBot(discord.Client):
   async def external_request(self, uri=None):
     async with httpx.AsyncClient() as client:
       r = await client.get(uri)
-      data = r.json()
-      print(data)
+      print('got a response, parsing')
+      return r.json()
 
-  async def parse_recent_runs(self, data):
+  def parse_recent_runs(self, data):
+    print('in here lolololol')
     runs = data.get('mythic_plus_recent_runs', None)
     if not runs or len(runs) == 0:
       return
@@ -41,14 +42,17 @@ class WoWBot(discord.Client):
             self.channel_id = chan.id
       else:
         chan = self.get_channel(self.channel_id)
+        data = None
         try:
           data = await self.external_request(self.raiderio_url)
-          parsed = self.parse_recent_runs(self, data)
-          if parsed:
-            await chan.send(parsed)
         except Exception as e:
           await chan.send(e)
           return
+        print('about to call sdlfksjdf')
+        parsed = self.parse_recent_runs(data)
+        print('done in there lol')
+        if parsed:
+          await chan.send(parsed)
         
   async def on_ready(self):
     print(f'logged in as {self.user}')
