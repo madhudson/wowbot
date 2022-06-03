@@ -1,5 +1,5 @@
 import asyncio
-import aiohttp
+import httpx
 import discord
 import os
 import time
@@ -13,14 +13,24 @@ class WoWBot(discord.Client):
       'gif'
     ]
     self.channel_id = None
-    self.last_dungeon = None
+    self.last_dungeon_time = None
     self.raiderio_url = 'https://raider.io/api/v1/characters/profile?region=eu&realm=tarren%20mill&name=turdbrush&fields=mythic_plus_recent_runs'
 
   async def external_request(self, uri=None):
-    with aiohttp.ClientSession() as session:
-      async with session.get(uri) as resp:
-        data = await resp.json()
-        print(data)
+    async with httpx.AsyncClient() as client:
+      r = await client.get(uri)
+      data = r.json()
+      print(data)
+
+  async def parse_recent_runs(self, data):
+    runs = data.get('mythic_plus_recent_runs', None)
+    if not runs or len(runs) == 0:
+      return
+    if runs[0]['completed_at'] == self.last_dungeon_time:
+      print('no new dungeon')
+      return
+    self.last_dungeon_time = runs[0]['completed_at']
+    return runs[0]['url']
   
   async def raiderio(self):
     while True:
@@ -31,10 +41,15 @@ class WoWBot(discord.Client):
             self.channel_id = chan.id
       else:
         chan = self.get_channel(self.channel_id)
-        data = await self.external_request(self.raiderio_url)
-        print(data)
-
-
+        try:
+          data = await self.external_request(self.raiderio_url)
+          parsed = self.parse_recent_runs(self, data)
+          if parsed:
+            await chan.send(parsed)
+        except Exception as e:
+          await chan.send(e)
+          return
+        
   async def on_ready(self):
     print(f'logged in as {self.user}')
 
