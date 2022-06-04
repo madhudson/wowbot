@@ -52,31 +52,53 @@ class WoWBot(discord.Client):
           await chan.send(parsed)
       time.sleep(10)
 
+
+  async def handle_command(self, cmd, args, msg):
+    print('got command: ', cmd)
+    print('got args: ', args)
+    if cmd == 'init' and msg.author.name == os.environ['ADMIN']:
+      asyncio.ensure_future(self.raiderio())
+    if cmd == 'gif':
+  
+      
+  
   def parse_message(self, msg):
     if msg.content.startswith('!'):
-      cmd = msg.content[1:].split(' ')
-      if cmd[0] not in self.commands:
+      all_cmd = msg.content[1:].split(' ')
+      cmd = all_cmd[0]
+      if cmd not in self.commands:
         raise Exception('can not find command, try !help')
-      
+      args = None if len(all_cmd) == 1 else ' '.join(all_cmd[1:]) 
+      return cmd, args
 
+      
   async def handle_message(self, msg):
-    parsed = self.parse_message(msg)
-    if not parsed:
-      return
+    cmd = None
+    args = None
+    try:
+      cmd, args = self.parse_message(msg)
+    except Exception as e:
+      raise e
+    try:
+      await self.handle_command(cmd, args, msg)
+    except Exception as e:
+      raise e
+
   
   async def on_ready(self):
     print(f'logged in as {self.user}')
 
+  
   async def on_message(self, message):
     if message.author == self.user:
       return
     try:
-      response = self.handle_message(message)
+      response = await self.handle_message(message)
       if not response: 
         return
     except Exception as e:
       await message.channel.send(str(e))
-    asyncio.ensure_future(self.raiderio())
+  
 
 
 wow_bot = WoWBot()
