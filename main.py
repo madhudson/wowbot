@@ -10,7 +10,8 @@ class WoWBot(discord.Client):
     super(WoWBot, self).__init__(*args, **kwargs)
     self.prefix = '!'
     self.commands = [
-      'gif'
+      'gif',
+      'init'
     ]
     self.channel_id = None
     self.last_dungeon_time = None
@@ -53,7 +54,15 @@ class WoWBot(discord.Client):
 
   def parse_message(self, msg):
     if msg.content.startswith('!'):
+      cmd = msg.content[1:].split(' ')
+      if cmd[0] not in self.commands:
+        raise Exception('can not find command, try !help')
       
+
+  async def handle_message(self, msg):
+    parsed = self.parse_message(msg)
+    if not parsed:
+      return
   
   async def on_ready(self):
     print(f'logged in as {self.user}')
@@ -61,11 +70,13 @@ class WoWBot(discord.Client):
   async def on_message(self, message):
     if message.author == self.user:
       return
-    parsed = self.parse_message(message)
-    if not parsed: 
-      return
+    try:
+      response = self.handle_message(message)
+      if not response: 
+        return
+    except Exception as e:
+      await message.channel.send(str(e))
     asyncio.ensure_future(self.raiderio())
-    print('tis done')
 
 
 wow_bot = WoWBot()
