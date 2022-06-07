@@ -3,6 +3,7 @@ import httpx
 import discord
 import os
 import time
+from keep_alive import keep_alive
 
 
 class WoWBot(discord.Client):
@@ -167,8 +168,8 @@ class WoWBot(discord.Client):
     except Exception as e:
       await message.channel.send(str(e))
     await message.delete()
-  
 
+keep_alive()
 
 wow_bot = WoWBot()
 wow_bot.run(os.environ['DISCORD_TOKEN'])
