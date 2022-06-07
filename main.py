@@ -15,14 +15,26 @@ class WoWBot(discord.Client):
     ]
     self.channel_id = None
     self.last_dungeon_time = None
-    self.raiderio_url = 'https://raider.io/api/v1/characters/profile?region=eu&realm=tarren%20mill&name=turdbrush&fields=mythic_plus_recent_runs'
+    self.raiderio_url = 'https://raider.io/api/v1/characters/profile?region=eu&realm=tarren%20mill&name={NAME}&fields=mythic_plus_recent_runs'
 
+
+  async def get_channel_id(self, name):
+    for chan in self.get_all_channels():
+      if chan.name == name:
+        self.channel_id = chan.id
+      return self.get_channel(self.channel_id)
+
+  
   async def external_request(self, uri=None):
     async with httpx.AsyncClient() as client:
-      r = await client.get(uri)
-      print('got a response, parsing')
-      return r.json()
+      try:
+        r = await client.get(uri)
+        print('got a response, parsing')
+        return r.json()
+      except Exception as e:
+        raise e
 
+  
   def parse_recent_runs(self, data):
     runs = data.get('mythic_plus_recent_runs', None)
     if not runs or len(runs) == 0:
@@ -32,26 +44,27 @@ class WoWBot(discord.Client):
       return
     self.last_dungeon_time = runs[0]['completed_at']
     return runs[0]['url']
-  
-  async def raiderio(self):
-    while True:
-      if not self.channel_id:
-        for chan in self.get_all_channels():
-          if chan.name == 'general':
-            self.channel_id = chan.id
-      else:
-        chan = self.get_channel(self.channel_id)
-        data = None
-        try:
-          data = await self.external_request(self.raiderio_url)
-        except Exception as e:
-          await chan.send(e)
-          return
-        parsed = self.parse_recent_runs(data)
-        if parsed:
-          await chan.send(parsed)
-      time.sleep(10)
 
+  
+  async def raiderio(self, char_name):
+    uri = self.raiderio_url.replace('{NAME}', char_name)
+    try:
+      data = await self.external_request(uri)
+      return self.parse_recent_runs(data)
+    except Exception as e:
+      raise e
+    
+  async def log_and_io(self, char_name, msg):
+    if not char_name:
+      raise Exception('require character name')
+    try:
+      raider_url = await self.raiderio(char_name)
+    except Exception as e:
+      raise e
+    
+    # get most recent raider io run 
+    # get most recent warcraft log
+  
 
   async def handle_command(self, cmd, args, msg):
     print('got command: ', cmd)
@@ -61,9 +74,11 @@ class WoWBot(discord.Client):
     if cmd == 'gif':
       pass
     if cmd == 'log' and msg.author.name == os.environ['ADMIN']:
-      await self.log_and_io()
+      try:
+        await self.log_and_io(args, msg)
+      except Exception as e:
+        raise e
   
-      
   
   def parse_message(self, msg):
     if msg.content.startswith('!'):
