@@ -15,6 +15,7 @@ class WoWBot(discord.Client):
     ]
     self.channel_id = None
     self.last_dungeon_time = None
+    self.raider_io_attempts = 3
     self.raiderio_url = 'https://raider.io/api/v1/characters/profile?region=eu&realm=tarren%20mill&name={NAME}&fields=mythic_plus_recent_runs'
 
 
@@ -38,6 +39,7 @@ class WoWBot(discord.Client):
   def parse_recent_runs(self, data):
     runs = data.get('mythic_plus_recent_runs', None)
     if not runs or len(runs) == 0:
+      print('no runs detected')
       return
     if runs[0]['completed_at'] == self.last_dungeon_time:
       print('no new dungeon')
@@ -48,13 +50,22 @@ class WoWBot(discord.Client):
   
   async def raiderio(self, char_name):
     uri = self.raiderio_url.replace('{NAME}', char_name)
-    try:
-      data = await self.external_request(uri)
-      return self.parse_recent_runs(data)
-    except Exception as e:
-      raise e
+    for i in range(self.raider_io_attempts):
+      try:
+        data = await self.external_request(uri)
+        recent = self.parse_recent_runs(data)
+        if not recent:
+          time.sleep(10)
+          continue
+        return recent
+      except Exception as e:
+        raise e
+    raise Exception('no new mythic runs detected')
+
     
   async def log_and_io(self, char_name, msg):
+    raider_url = None
+    logs_url = None
     if not char_name:
       raise Exception('require character name')
     try:
