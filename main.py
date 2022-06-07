@@ -62,6 +62,10 @@ class WoWBot(discord.Client):
         raise e
     raise Exception('no new mythic runs detected')
 
+
+  async def warcraft_logs(self, char_name):
+    # Warcraft Logs API2 - GraphQL
+    #ReportData
     
   async def log_and_io(self, char_name, msg):
     raider_url = None
@@ -72,9 +76,10 @@ class WoWBot(discord.Client):
       raider_url = await self.raiderio(char_name)
     except Exception as e:
       raise e
-    
-    # get most recent raider io run 
-    # get most recent warcraft log
+    try:
+      logs_url = await self.warcraft_logs(char_name)
+    except Exception as e:
+      raise e
   
 
   async def handle_command(self, cmd, args, msg):
