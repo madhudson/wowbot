@@ -59,6 +59,9 @@ class WoWBot(discord.Client):
     if cmd == 'init' and msg.author.name == os.environ['ADMIN']:
       asyncio.ensure_future(self.raiderio())
     if cmd == 'gif':
+      pass
+    if cmd == 'log' and msg.author.name == os.environ['ADMIN']:
+      await self.log_and_io()
   
       
   
