@@ -3,8 +3,15 @@ import httpx
 import discord
 import os
 import time
+from typing import List, Tuple, Dict, Any, TypedDict
+
 from keep_alive import keep_alive
 
+class RaiderIOData(TypedDict):
+  url: str
+  name: str
+  upgraded: int
+  level: str
 
 class WoWBot(discord.Client):
   def __init__(self, *args, **kwargs):
@@ -23,14 +30,14 @@ class WoWBot(discord.Client):
     self.warcraft_logs_api = f'https://www.warcraftlogs.com:443/v1/reports/user/huddo?api_key={os.environ["LOGS_SECRET_V1"]}'
 
 
-  async def get_channel_id(self, name):
+  async def get_channel_id(self, name: str) -> str:
     for chan in self.get_all_channels():
       if chan.name == name:
         self.channel_id = chan.id
       return self.get_channel(self.channel_id)
 
   
-  async def external_request(self, uri=None):
+  async def external_request(self, uri: str='') -> Dict[Any, Any]:
     async with httpx.AsyncClient() as client:
       try:
         r = await client.get(uri)
@@ -40,22 +47,25 @@ class WoWBot(discord.Client):
         raise e
 
   
-  def parse_recent_raiderio_runs(self, data):
+  def parse_recent_raiderio_runs(self, data: Dict[Any, Any]) -> RaiderIOData:
+    raider_io_data: RaiderIOData = {
+      'url': None,
+      'upgraded': None,
+      'name': None,
+      'level': None
+    }
     runs = data.get('mythic_plus_recent_runs', None)
-    if not runs or len(runs) == 0:
+    if not runs or len(runs) == 0 or runs[0]['completed_at'] == self.last_raiderio_dungeon_time:
       print('no runs detected')
-      return None, None, None, None
-    if runs[0]['completed_at'] == self.last_raiderio_dungeon_time:
-      print('no new dungeon')
-      return None, None, None, None
+      return raider_io_data
     self.last_dungeon_time = runs[0]['completed_at']
-    upgraded = runs[0]['num_keystone_upgrades']
-    name = runs[0]["dungeon"]
-    level = runs[0]["mythic_level"]
-    return runs[0]['url'], name, upgraded, level
+    raider_io_data['upgraded'] = runs[0]['num_keystone_upgrades']
+    raider_io_data['name'] = runs[0]["dungeon"]
+    raider_io_data['level'] = runs[0]["mythic_level"]
+    return raider_io_data
 
 
-  def parse_recent_warcraftlogs_runs(self, data):
+  def parse_recent_warcraftlogs_runs(self, data: List[Dict[Any, Any]]) -> str:
     if not data or len(data) == 0:
       return
     if data[0].get('id', None) == self.last_log_id:
@@ -64,26 +74,26 @@ class WoWBot(discord.Client):
     return data[0].get('id', None)
     
   
-  async def raiderio(self, char_name):
-    uri = self.raiderio_url.replace('{NAME}', char_name)
+  async def raiderio(self, char_name: str) -> RaiderIOData:
+    uri: str = self.raiderio_url.replace('{NAME}', char_name)
     for i in range(self.raider_io_attempts):
       try:
-        data = await self.external_request(uri)
-        url, name, upgraded, level = self.parse_recent_raiderio_runs(data)
-        if not url:
+        data: Dict[Any, Any] = await self.external_request(uri)
+        raider_io_data: RaiderIOData = self.parse_recent_raiderio_runs(data)
+        if not raider_io_data.get('url'):
           time.sleep(10)
           continue
-        return url, name, upgraded, level
+        return raider_io_data
       except Exception as e:
         raise e
     raise Exception('no new mythic runs detected in raiderio')
 
 
-  async def warcraft_logs(self):
+  async def warcraft_logs(self) -> str:
     for i in range(self.raider_io_attempts):
       try:
-        data = await self.external_request(self.warcraft_logs_api)
-        recent = self.parse_recent_warcraftlogs_runs(data)
+        data: Dict[Any, Any] = await self.external_request(self.warcraft_logs_api)
+        recent: str = self.parse_recent_warcraftlogs_runs(data)
         if not recent:
           time.sleep(10)
           continue
@@ -93,66 +103,72 @@ class WoWBot(discord.Client):
     raise Exception('no new mythic logs detected')
 
     
-  async def log_and_io(self, char_name, msg):
-    raider_url = None
-    name = None
-    upgraded = None
-    logs_url = None
-    level = None
+  async def log_and_io(self, char_name: str, msg: discord.Message) -> None:
+    raider_io_data: RaiderIOData = {
+      'name': None,
+      'level': None,
+      'upgraded': None,
+      'url': None
+    }
     if not char_name:
       raise Exception('require character name')
     try:
-      raider_url, name, upgraded, level = await self.raiderio(char_name)
+      raider_io_data = await self.raiderio(char_name)
     except Exception as e:
       raise e
     try:
-      recent = await self.warcraft_logs()
+      recent: str = await self.warcraft_logs()
       logs_url = self.warcraft_logs_url_link.replace('{ID}', recent)
     except Exception as e:
       raise e
-    if upgraded >= 1:
-      await msg.channel.send(f'**KEY COMPLETED IN TIME: {name} +{level} (+{upgraded})**')
+    if raider_io_data.get('upgraded', 0) >= 1:
+      upgraded_str = f'{raider_io_data.get("name")}+{raider_io_data.get("level")} (+{raider_io_data.get("upgraded")}'
+      await msg.channel.send(f'**KEY COMPLETED IN TIME: {upgraded_str} )**')
     else:
-      await msg.channel.send(f'**KEY COMPLETED OVER TIME: {name} +{level}**')
-    await msg.channel.send(raider_url)
+      await msg.channel.send(f'**KEY COMPLETED OVER TIME: {raider_io_data.get("name")} +{raider_io_data.get("level")}**')
+    await msg.channel.send(raider_io_data.get('url'))
     await msg.channel.send(f'''{logs_url}
 --------------------------------------------------------------------''')
 
 
-  async def purge_channel(self, msg):
+  async def purge_channel(self, msg: discord.Message) -> None:
     try:
       purged = await msg.channel.purge(limit=20)
       print(f'[x] purged: {len(purged)}')
     except Exception as e:
       raise e
+      
+
+  def is_admin(self, msg: discord.Message) -> bool:
+    return msg.author.name == os.environ['ADMIN']
 
   
-  async def handle_command(self, cmd, args, msg):
+  async def handle_command(self, cmd: str, args: str, msg: discord.Message) -> None:
     #  asyncio.ensure_future(self.raiderio())
-    if cmd == 'purge':
+    if cmd == 'purge' and self.is_admin(msg):
       try:
         await self.purge_channel(msg)
       except Exception as e:
         raise e
-    if cmd == 'log' and msg.author.name == os.environ['ADMIN']:
+    if cmd == 'log' and self.is_admin(msg):
       try:
         await self.log_and_io(args, msg)
       except Exception as e:
         raise e
   
   
-  def parse_message(self, msg):
-    all_cmd = msg.content[1:].split(' ')
-    cmd = all_cmd[0]
+  def parse_message(self, msg: discord.Message) -> Tuple[str, str]:
+    all_cmd: str = msg.content[1:].split(' ')
+    cmd: str = all_cmd[0]
     if cmd not in self.commands:
       raise Exception('can not find command, try !help')
     args = None if len(all_cmd) == 1 else ' '.join(all_cmd[1:]) 
     return cmd, args
 
       
-  async def handle_message(self, msg):
-    cmd = None
-    args = None
+  async def handle_message(self, msg: discord.Message) -> None:
+    cmd: str = None
+    args: str = None
     try:
       cmd, args = self.parse_message(msg)
     except Exception as e:
@@ -163,11 +179,11 @@ class WoWBot(discord.Client):
       raise e
 
   
-  async def on_ready(self):
+  async def on_ready(self) -> None:
     print(f'logged in as {self.user}')
 
   
-  async def on_message(self, message):
+  async def on_message(self, message: discord.Message) -> None:
     if message.author == self.user:
       return
     if not message.content.startswith('!'):
