@@ -3,15 +3,18 @@ import httpx
 import discord
 import os
 import time
-from typing import List, Tuple, Dict, Any, TypedDict
+from typing import List, Tuple, Dict, Any
+from dataclasses import dataclass
 
 from keep_alive import keep_alive
 
-class RaiderIOData(TypedDict):
+@dataclass
+class RaiderIO:
   url: str
   name: str
   upgraded: int
   level: str
+
 
 class WoWBot(discord.Client):
   def __init__(self, *args, **kwargs):
@@ -47,21 +50,16 @@ class WoWBot(discord.Client):
         raise e
 
   
-  def parse_recent_raiderio_runs(self, data: Dict[Any, Any]) -> RaiderIOData:
-    raider_io_data: RaiderIOData = {
-      'url': None,
-      'upgraded': None,
-      'name': None,
-      'level': None
-    }
+  def parse_recent_raiderio_runs(self, data: Dict[Any, Any]) -> RaiderIO:
+    raider_io_data: RaiderIO = RaiderIO()
     runs = data.get('mythic_plus_recent_runs', None)
     if not runs or len(runs) == 0 or runs[0]['completed_at'] == self.last_raiderio_dungeon_time:
       print('no runs detected')
       return raider_io_data
     self.last_dungeon_time = runs[0]['completed_at']
-    raider_io_data['upgraded'] = runs[0]['num_keystone_upgrades']
-    raider_io_data['name'] = runs[0]["dungeon"]
-    raider_io_data['level'] = runs[0]["mythic_level"]
+    raider_io_data.upgraded = runs[0]['num_keystone_upgrades']
+    raider_io_data.name = runs[0]["dungeon"]
+    raider_io_data.level = runs[0]["mythic_level"]
     return raider_io_data
 
 
@@ -74,13 +72,13 @@ class WoWBot(discord.Client):
     return data[0].get('id', None)
     
   
-  async def raiderio(self, char_name: str) -> RaiderIOData:
+  async def raiderio(self, char_name: str) -> RaiderIO:
     uri: str = self.raiderio_url.replace('{NAME}', char_name)
     for i in range(self.raider_io_attempts):
       try:
         data: Dict[Any, Any] = await self.external_request(uri)
-        raider_io_data: RaiderIOData = self.parse_recent_raiderio_runs(data)
-        if not raider_io_data.get('url'):
+        raider_io_data: RaiderIO = self.parse_recent_raiderio_runs(data)
+        if not raider_io_data.url:
           time.sleep(10)
           continue
         return raider_io_data
@@ -104,12 +102,7 @@ class WoWBot(discord.Client):
 
     
   async def log_and_io(self, char_name: str, msg: discord.Message) -> None:
-    raider_io_data: RaiderIOData = {
-      'name': None,
-      'level': None,
-      'upgraded': None,
-      'url': None
-    }
+    raider_io_data: RaiderIO = RaiderIO()
     if not char_name:
       raise Exception('require character name')
     try:
@@ -122,11 +115,11 @@ class WoWBot(discord.Client):
     except Exception as e:
       raise e
     if raider_io_data.get('upgraded', 0) >= 1:
-      upgraded_str = f'{raider_io_data.get("name")}+{raider_io_data.get("level")} (+{raider_io_data.get("upgraded")}'
+      upgraded_str = f'{raider_io_data.name}+{raider_io_data.level} (+{raider_io_data.upgraded})'
       await msg.channel.send(f'**KEY COMPLETED IN TIME: {upgraded_str} )**')
     else:
-      await msg.channel.send(f'**KEY COMPLETED OVER TIME: {raider_io_data.get("name")} +{raider_io_data.get("level")}**')
-    await msg.channel.send(raider_io_data.get('url'))
+      await msg.channel.send(f'**KEY COMPLETED OVER TIME: {raider_io_data.name} +{raider_io_data.level}**')
+    await msg.channel.send(raider_io_data.url)
     await msg.channel.send(f'''{logs_url}
 --------------------------------------------------------------------''')
 
@@ -194,7 +187,7 @@ class WoWBot(discord.Client):
       await message.channel.send(str(e))
     await message.delete()
 
-keep_alive()
+#keep_alive()
 
 wow_bot = WoWBot()
 wow_bot.run(os.environ['DISCORD_TOKEN'])
