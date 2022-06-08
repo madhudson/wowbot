@@ -11,9 +11,8 @@ class WoWBot(discord.Client):
     super(WoWBot, self).__init__(*args, **kwargs)
     self.prefix = '!'
     self.commands = [
-      'gif',
-      'init',
-      'log'
+      'log',
+      'purge'
     ]
     self.channel_id = None
     self.last_raiderio_dungeon_time = None
@@ -118,13 +117,23 @@ class WoWBot(discord.Client):
     await msg.channel.send(raider_url)
     await msg.channel.send(f'''{logs_url}
 --------------------------------------------------------------------''')
-  
 
+
+  async def purge_channel(self, msg):
+    try:
+      purged = await msg.channel.purge(limit=20)
+      print(f'[x] purged: {len(purged)}')
+    except Exception as e:
+      raise e
+
+  
   async def handle_command(self, cmd, args, msg):
-    # if cmd == 'init' and msg.author.name == os.environ['ADMIN']:
     #  asyncio.ensure_future(self.raiderio())
-    if cmd == 'gif':
-      pass
+    if cmd == 'purge':
+      try:
+        await self.purge_channel(msg)
+      except Exception as e:
+        raise e
     if cmd == 'log' and msg.author.name == os.environ['ADMIN']:
       try:
         await self.log_and_io(args, msg)
