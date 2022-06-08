@@ -187,7 +187,7 @@ class WoWBot(discord.Client):
       await message.channel.send(str(e))
     await message.delete()
 
-#keep_alive()
+keep_alive()
 
 wow_bot = WoWBot()
 wow_bot.run(os.environ['DISCORD_TOKEN'])
