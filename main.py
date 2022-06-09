@@ -1,12 +1,11 @@
 import asyncio
 import httpx
 import discord
-import os
+import json
 import time
 from typing import List, Tuple, Dict, Any
 from dataclasses import dataclass
 
-from keep_alive import keep_alive
 
 @dataclass
 class RaiderIO:
@@ -19,6 +18,8 @@ class RaiderIO:
 class WoWBot(discord.Client):
   def __init__(self, *args, **kwargs):
     super(WoWBot, self).__init__(*args, **kwargs)
+    with open('./secrets.json', 'r') as f:
+        self.secrets = json.loads(f.read())
     self.prefix = '!'
     self.commands = [
       'log',
@@ -30,7 +31,7 @@ class WoWBot(discord.Client):
     self.raider_io_attempts = 3
     self.raiderio_url = 'https://raider.io/api/v1/characters/profile?region=eu&realm=tarren%20mill&name={NAME}&fields=mythic_plus_recent_runs'
     self.warcraft_logs_url_link = 'https://www.warcraftlogs.com/reports/{ID}#fight=last'
-    self.warcraft_logs_api = f'https://www.warcraftlogs.com:443/v1/reports/user/huddo?api_key={os.environ["LOGS_SECRET_V1"]}'
+    self.warcraft_logs_api = f'https://www.warcraftlogs.com:443/v1/reports/user/huddo?api_key={self.secrets["LOGS_SECRET_V1"]}'
 
 
   async def get_channel_id(self, name: str) -> str:
@@ -43,23 +44,22 @@ class WoWBot(discord.Client):
   async def external_request(self, uri: str='') -> Dict[Any, Any]:
     async with httpx.AsyncClient() as client:
       try:
-        r = await client.get(uri)
-        print('got a response, parsing')
+        r = await client.get(uri) 
         return r.json()
       except Exception as e:
         raise e
 
   
   def parse_recent_raiderio_runs(self, data: Dict[Any, Any]) -> RaiderIO:
-    raider_io_data: RaiderIO = RaiderIO()
-    runs = data.get('mythic_plus_recent_runs', None)
-    if not runs or len(runs) == 0 or runs[0]['completed_at'] == self.last_raiderio_dungeon_time:
-      print('no runs detected')
+    raider_io_data: RaiderIO = RaiderIO(url='', name='', upgraded=0, level='')
+    runs = data.get('mythic_plus_recent_runs', None) 
+    if not runs or len(runs) == 0 or runs[0]['completed_at'] == self.last_raiderio_dungeon_time: 
       return raider_io_data
     self.last_dungeon_time = runs[0]['completed_at']
     raider_io_data.upgraded = runs[0]['num_keystone_upgrades']
     raider_io_data.name = runs[0]["dungeon"]
     raider_io_data.level = runs[0]["mythic_level"]
+    raider_io_data.url = runs[0]['url'] 
     return raider_io_data
 
 
@@ -102,7 +102,7 @@ class WoWBot(discord.Client):
 
     
   async def log_and_io(self, char_name: str, msg: discord.Message) -> None:
-    raider_io_data: RaiderIO = RaiderIO()
+    raider_io_data: RaiderIO = RaiderIO(name='', url='', upgraded=0, level='')
     if not char_name:
       raise Exception('require character name')
     try:
@@ -113,8 +113,8 @@ class WoWBot(discord.Client):
       recent: str = await self.warcraft_logs()
       logs_url = self.warcraft_logs_url_link.replace('{ID}', recent)
     except Exception as e:
-      raise e
-    if raider_io_data.get('upgraded', 0) >= 1:
+      raise e 
+    if raider_io_data.upgraded >= 1:
       upgraded_str = f'{raider_io_data.name}+{raider_io_data.level} (+{raider_io_data.upgraded})'
       await msg.channel.send(f'**KEY COMPLETED IN TIME: {upgraded_str} )**')
     else:
@@ -126,14 +126,13 @@ class WoWBot(discord.Client):
 
   async def purge_channel(self, msg: discord.Message) -> None:
     try:
-      purged = await msg.channel.purge(limit=20)
-      print(f'[x] purged: {len(purged)}')
+      purged = await msg.channel.purge(limit=20) 
     except Exception as e:
       raise e
       
 
   def is_admin(self, msg: discord.Message) -> bool:
-    return msg.author.name == os.environ['ADMIN']
+    return msg.author.name == self.secrets['ADMIN']
 
   
   async def handle_command(self, cmd: str, args: str, msg: discord.Message) -> None:
@@ -184,10 +183,10 @@ class WoWBot(discord.Client):
     try:
       await self.handle_message(message)
     except Exception as e:
+      print(e)
       await message.channel.send(str(e))
     await message.delete()
 
-keep_alive()
 
 wow_bot = WoWBot()
-wow_bot.run(os.environ['DISCORD_TOKEN'])
+wow_bot.run(wow_bot.secrets['DISCORD_TOKEN'])
