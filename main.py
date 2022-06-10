@@ -61,11 +61,12 @@ class WoWBot(discord.Client):
         r = await client.get(uri) 
         return r.json()
       except Exception as e:
+        print('REQUEST ERROR')
         raise e
 
   
-  def parse_recent_raiderio_runs(self, data: Dict[Any, Any], index: int) -> RaiderIO:
-    raider_io_data: RaiderIO = RaiderIO(url='', name='', upgraded=0, level='')
+  def parse_recent_raiderio_runs(self, data: Dict[Any, Any], index: int) -> RaiderIO: 
+    raider_io_data: RaiderIO = RaiderIO(url='', name='', upgraded=0, level='', time=0)
     runs = data.get('mythic_plus_recent_runs', None) 
     if not runs or len(runs) == index or runs[index]['completed_at'] == self.last_raiderio_dungeon_time: 
       return raider_io_data
@@ -91,13 +92,14 @@ class WoWBot(discord.Client):
     for n, log in enumerate(data):
       if n == self.warcraft_log_threshold:
         return None, None
-      uri = self.warcraft_logs_detailed.replace('[ID]', log['id'])
+      uri = self.warcraft_logs_detailed.replace('[ID]', str(log['id']))
       try:
         log_detailed = await self.external_request(uri)
-        match_id = parse_warcraftlogs_detailed(log_detailed, raider_io)
+        match_id = self.parse_warcraftlogs_detailed(log_detailed, raider_io)
         if not match_id: continue
         return log['id'], match_id
       except Exception as e:
+        print('[ERROR] parse_recent_warcraftlogs_runs')
         raise e
     return None, None
     
@@ -105,14 +107,15 @@ class WoWBot(discord.Client):
   async def raiderio(self, char_name: str, index: int) -> RaiderIO:
     uri: str = self.raiderio_url.replace('{NAME}', char_name)
     for i in range(self.raider_io_attempts):
-      try:
-        data: Dict[Any, Any] = await self.external_request(uri)
-        raider_io_data: RaiderIO = await self.parse_recent_raiderio_runs(data, index)
+      try: 
+        data: Dict[Any, Any] = await self.external_request(uri) 
+        raider_io_data: RaiderIO = self.parse_recent_raiderio_runs(data, index) 
         if not raider_io_data.url:
           time.sleep(10)
           continue
         return raider_io_data
       except Exception as e:
+        print('[ERROR] raiderio')
         raise e
 
   
@@ -120,24 +123,25 @@ class WoWBot(discord.Client):
     for i in range(self.raider_io_attempts):
       try:
         data: Dict[Any, Any] = await self.external_request(self.warcraft_logs_api)
-        id, run_id = self.parse_recent_warcraftlogs_runs(data, raider_io)
+        id, run_id = await self.parse_recent_warcraftlogs_runs(data, raider_io)
         if not id:
           time.sleep(10)
           continue
         return id, run_id
       except Exception as e:
+        print('[ERROR] warcraft_logs')
         raise e
     return None, None
 
   def get_warcraftlogs_return_string(self, log_id, run_id):
     if not log_id:
       return '** No warcraftlog found for dungeon **'
-    logs_url = self.warcraft_logs_url_link.replace('{ID}', log_id)
-    logs_url = logs_url.replace('{RUN}', run_id)
+    logs_url = self.warcraft_logs_url_link.replace('{ID}', str(log_id))
+    logs_url = logs_url.replace('{RUN}', str(run_id))
     return logs_url
     
   async def log_and_io(self, args: List[str], msg: discord.Message) -> None:
-    raider_io_data: RaiderIO = RaiderIO(name='', url='', upgraded=0, level='')
+    raider_io_data: RaiderIO = RaiderIO(name='', url='', upgraded=0, level='', time=0)
     if len(args) != 2:
       raise Exception('requires char name and index')
     char_name = args[0]
@@ -148,16 +152,19 @@ class WoWBot(discord.Client):
     try:
       index = int(index)
     except ValueError as e:
+      print('[ERROR] log_and_io 1')
       raise e
     if not char_name:
       raise Exception('require character name')
     try:
       raider_io_data = await self.raiderio(char_name, index)
     except Exception as e:
+      print('[ERROR] log_and_io 2')
       raise e
     try:
       log_id, run_id = await self.warcraft_logs(raider_io_data)
     except Exception as e:
+      print('[ERROR] log_and_io 2')
       raise e 
     log_string = self.get_warcraftlogs_return_string(log_id, run_id)
     if raider_io_data.upgraded >= 1:
@@ -166,7 +173,7 @@ class WoWBot(discord.Client):
     else:
       await msg.channel.send(f'**KEY COMPLETED OVER TIME: {raider_io_data.name} +{raider_io_data.level}**')
     await msg.channel.send(raider_io_data.url)
-    await msg.channel.send(f'''{logs_url}
+    await msg.channel.send(f'''{log_string}
 --------------------------------------------------------------------''')
 
 
@@ -187,11 +194,13 @@ class WoWBot(discord.Client):
       try:
         await self.purge_channel(msg)
       except Exception as e:
+        print('[ERROR] handle_command')
         raise e
     if cmd == 'log' and self.is_admin(msg):
       try:
         await self.log_and_io(args, msg)
       except Exception as e:
+        print(e)
         raise e
   
   
