@@ -242,6 +242,8 @@ class WoWBot(discord.Client):
       await message.channel.send(str(e))
     await message.delete()
 
+intents = discord.Intents.default()
+intents.message_content = True
 
-wow_bot = WoWBot()
+wow_bot = WoWBot(intents=intents)
 wow_bot.run(wow_bot.secrets['DISCORD_TOKEN'])
